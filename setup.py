@@ -12,12 +12,22 @@ setuptools.setup(
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/cnakai/bbetter",
-    packages=setuptools.find_packages(),
     classifiers=[
         "Programming Language :: Python :: 3",
         "Development Status :: 1 - Planning",
-        "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
+        ("License :: OSI Approved :: GNU General Public License v3 or later"
+         "(GPLv3+)"),
         "Operating System :: OS Independent",
     ],
     python_requires=">=3.6",
+
+    py_modules=['bbetter'],
+    install_requires=[
+        'Click'
+    ],
+    packages=setuptools.find_packages(),
+    entry_points="""
+    [console_scripts]
+    bbetter=bbetter.cli:cli
+    """
 )
