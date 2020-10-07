@@ -10,7 +10,9 @@ from time import sleep
 @click.command()
 @click.argument('class_name')
 @click.argument('assignment_name')
-def get(class_name, assignment_name):
+@click.argument('username')
+@click.argument('password')
+def get(class_name, assignment_name, username, password):
     prof = {
         'browser.helperApps.neverAsk.saveToDisk': 'application/zip',
         'browser.download.lastDir': getcwd()
@@ -20,8 +22,8 @@ def get(class_name, assignment_name):
     b.visit('https://bblearn.nau.edu')
     b.find_by_id('agree_button').click()
     b.find_by_id('cas-login-btn').click()
-    b.find_by_id('username').first.fill('')
-    b.find_by_id('password').first.fill('')
+    b.find_by_id('username').first.fill(username)
+    b.find_by_id('password').first.fill(password)
     b.find_by_name('submit').first.click()
 
     b.find_by_tag('body').first.type('focus')
