@@ -51,5 +51,5 @@ def get(class_name, assignment_name, username, password):
         iframe.find_by_id('bottom_Submit').click()
         iframe.links.find_by_partial_text('Download').click()
 
-    b.close()
+    b.quit()
 
