@@ -1,5 +1,5 @@
 import click
-import bbetter.submissions.commands
+import bbetter.submissions
 
 
 @click.group()
@@ -7,5 +7,5 @@ def cli():
     pass
 
 
-for command in bbetter.submissions.commands.group:
+for command in bbetter.submissions.command_group:
     cli.add_command(command)
