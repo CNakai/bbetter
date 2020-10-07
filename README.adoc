@@ -1,5 +1,5 @@
-CAKE
-======
+= CAKE
+
 "It's as easy as cake."  My friend Josh was raised in Italy and he has a fun
 habit of accidentally mixing English idioms.
 
