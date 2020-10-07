@@ -14,8 +14,9 @@ from time import sleep
 @click.argument('password')
 def get(class_name, assignment_name, username, password):
     prof = {
+        'browser.download.dir': getcwd(),
+        'browser.download.folderList': 2,
         'browser.helperApps.neverAsk.saveToDisk': 'application/zip',
-        'browser.download.lastDir': getcwd()
     }
 
     b = splinter.Browser(profile_preferences=prof)
@@ -50,4 +51,5 @@ def get(class_name, assignment_name, username, password):
         iframe.find_by_id('bottom_Submit').click()
         iframe.links.find_by_partial_text('Download').click()
 
-    b.quit()
+    b.close()
+
