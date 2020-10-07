@@ -1,4 +1,21 @@
-import os, shutil, sys, zipfile, subprocess, argparse
+import argparse
+import click
+import os
+import shutil
+import subprocess
+import sys
+import zipfile
+
+
+@click.command()
+def unpack():
+    """This program extracts student submissions from a BBLearn zip file into their
+    own directory and removes the BBLearn prefix from their filenames.
+    Optionally, it can also unzip any zipfiles in the students' submissions
+
+    """
+    print('money')
+
 
 def main():
     args = create_parser().parse_args()

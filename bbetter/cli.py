@@ -1,2 +1,11 @@
+import click
+import bbetter.submissions.commands
+
+
+@click.group()
 def cli():
-    print('hello')
+    pass
+
+
+for command in bbetter.submissions.commands.group:
+    cli.add_command(command)
