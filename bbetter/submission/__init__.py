@@ -1,4 +1,5 @@
 import click
+from .get import get
 from .unpack import unpack
 
 
@@ -8,5 +9,6 @@ def __submission():
     pass
 
 
+__submission.add_command(get)
 __submission.add_command(unpack)
 command_group = [__submission]

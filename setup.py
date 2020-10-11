@@ -23,7 +23,8 @@ setuptools.setup(
 
     py_modules=['bbetter'],
     install_requires=[
-        'Click'
+        'Click',
+        'splinter',
     ],
     packages=setuptools.find_packages(),
     entry_points="""
