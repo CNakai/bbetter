@@ -2,6 +2,7 @@
 import click
 from os import getcwd
 import splinter
+from splinter.exceptions import ElementDoesNotExist
 from selenium.webdriver.common.keys import Keys
 from time import sleep
 
@@ -44,12 +45,18 @@ def get(class_name, assignment_name, username, password):
             iframe.find_by_id('menuPuller').click()
         iframe.links.find_by_text('Grade Center').click()
         iframe.links.find_by_text('Full Grade Center').click()
+        iframe.find_by_text(assignment_name).first.click()
         (iframe.find_by_text(assignment_name).first
          .find_by_xpath('../..//a').first.click())
         iframe.find_by_text('Assignment File Download').click()
-        iframe.find_by_id('listContainer_selectAll').click()
+        iframe.find_by_id('listContainer_showAllButton').click()
+        # This will work even if the "select all" checkbox isn't showing
+        iframe.execute_script("document.querySelector('#listContainer_selectAll').click()")
         iframe.find_by_id('bottom_Submit').click()
-        iframe.links.find_by_partial_text('Download').click()
+        while iframe.is_element_not_present_by_xpath("//a[contains(text(), 'Download assignments now')]"):
+            sleep(0.1)
+            print('zzzz')
+        iframe.links.find_by_partial_text('Download assignments now').click()
 
     b.quit()
 
