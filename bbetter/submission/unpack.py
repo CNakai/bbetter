@@ -1,167 +1,140 @@
 import click
-import os
 import shutil
 import sys
-import zipfile
+import bbetter.submission.util as util
+from os import listdir, mkdir, remove, rename, scandir
+from os.path import isdir, exists, join
+from zipfile import is_zipfile, ZipFile
 
 
 @click.command()
-@click.option('--extract_zips', is_flag=True, default=True, help=(
-    "Indicates that any zipfiles in student submissionx should be unzipped "
-    "in that student's submission directory.  Additionally, if the zipfile "
-    "contains only a single directory then the contents of that directory are "
-    "elevated to the level of that directory and then it is deleted."
+@click.argument('submission_zip')
+@click.argument('submission_dir')
+@click.option('--extract_submitted_zips', is_flag=True, default=True, help=(
+    """Unzip any zipfiles in student submissions and delete the zipfiles.
+
+    Defaults to True."""
 ))
-@click.argument('submission_zipfile')
-@click.argument('STUDENT_SUBMISSION_DIRECTORY')
-def unpack(submission_zipfile, student_submission_directory, extract_zips):
-    """The files of each student's submission are placed into a subdirectory
-    within the STUDENT_SUBMISSION_DIRECTORY and the filename prefix added by
-    BBLearn is removed from them.
+@click.option('--hoist_lone_subdirs', is_flag=True, default=True, help=(
+    """If the only contents of a student's submission directory is a single
+    subdirectory, then that subdirectory's contents are moved into the
+    student's submission directory and the subdirectory is deleted also.  This
+    takes place after extracting submitted zipfiles.
 
-    SUBMISSION_ZIPFILE: BBLearn assigment submission zip file
+    Defaults to True."""
+))
+@click.option('--clean_up_student_dirs', is_flag=True, default=True, help=(
+    """Deletes various extraneous files and directories that may be present in
+    the student's submission directories.  This takes place after extracting
+    submitted zips and hoisting lone subdirectories.
 
-    STUDENT_SUBMISSION_DIRECTORY: Path for directory which will contain a
-    subdirectory for each student's submission; the directory will be created
-    if it does not exist
+    Currently deletes the following files and directories:
+        __MACOSX
+        .DS_store
+
+    Defaults to True."""
+))
+def unpack(submission_zip, submission_dir, extract_submitted_zips,
+           hoist_lone_subdirs, clean_up_student_dirs):
+    """The BBLearn assignment submission zipfile indicated by SUBMISSION_ZIP is
+    unzipped at the SUBMISSION_DIR.  If no directory exists at that path, it
+    will be created if it does not exist.  If it exists but is not empty, the
+    user will be invited to remove its contents or quit.
+
+    Once the submission directory has been prepared, the files from the
+    submission zip are relocated to a subdirectory of the submission directory
+    whose name is the student id of the student that submitted the file.  When
+    the files are relocated, they are also renamed to remove the prefix added
+    to the filename by BBLearn.
 
     """
-    if not os.path.isfile(submission_zipfile):
-        print("Whoops, it seems that there is no file at", submission_zipfile)
+    if not is_zipfile(submission_zip):
+        print(f"Whoops, it seems that there is no zipfile at {submission_zip}")
         sys.exit(1)
 
-    extract_student_submissions_into_individual_directories(submission_zipfile, student_submission_directory)
+    setup(submission_dir)
 
-    if extract_zips:
-        extract_and_delete_and_normalize_submitted_zipfiles(student_submission_directory)
+    print("\nUnzipping submission archive...")
+    with ZipFile(submission_zip) as z:
+        z.extractall(submission_dir)
+        print("Done!")
+
+    refile_per_student(submission_dir)
+
+    for student_directory_entry in scandir(submission_dir):
+        if extract_submitted_zips:
+            extract_any_zips(student_directory_entry.path)
+        if hoist_lone_subdirs:
+            hoist_lone_subdir_if_exists(student_directory_entry.path)
+        if clean_up_student_dirs:
+            clean_up(student_directory_entry.path, extract_submitted_zips)
 
     print("\nSuccess")
 
 
-def extract_student_submissions_into_individual_directories(zipfile_path, top_level_submission_directory_path):
-    create_top_level_submission_directory(top_level_submission_directory_path)
-    unzip_submission_files_into_directory(zipfile_path, top_level_submission_directory_path)
-    student_ids = get_student_ids_from_submission_filenames(top_level_submission_directory_path)
-    id_to_filename_map = create_student_id_to_submission_filename_map(student_ids, top_level_submission_directory_path)
-    relocate_submission_files_to_per_student_directories(top_level_submission_directory_path, id_to_filename_map)
+def setup(submission_directory):
+    """Ensures that submission_dir exists and is empty"""
+    if isdir(submission_directory) and len(listdir(submission_directory)) == 0:
+        pass  # Nothing to do
+    elif not exists(submission_directory):
+        print("Creating submission directory...")
+        mkdir(submission_directory)
+    else:
+        print(f"{submission_directory} is not empty!")
+        print("\nTo continue all files in this directory must be DELETED!")
+        response = input("Do you want to continue? Y/n: ").lower()
+
+        if response in ('yes', 'ye', 'y', ''):
+            shutil.rmtree(submission_directory)
+            mkdir(submission_directory)
+        else:
+            print("Quitting...")
+            sys.exit(0)
 
 
-def create_top_level_submission_directory(directory_path):
-    print("Creating directory for containing student submissions...")
-    try:
-        os.mkdir(directory_path)
-    except FileExistsError as e:
-        if not os.listdir(directory_path) == []: # Check if directory is empty
-            should_continue = prompt_user_for_directory_clearing(directory_path)
-            if not should_continue:
-                print("Quitting...")
-                sys.exit(0)
-            clear_directory(directory_path)
+def refile_per_student(submission_directory):
+    """Creates per student subdirectories within the submission_dir and moves
+    each students files into their directory"""
+    submission_file_entries = sorted(
+        list(scandir(submission_directory)),
+        key=lambda entry: util.extract_student_id(entry.name)
+    )
 
-
-def prompt_user_for_directory_clearing(student_submission_directory_path):
-    print("Proposed directory for containing student submissions already exists and is not empty!")
-    print("\nTo continue all files in this directory must be DELETED!")
-    response = input("Do you want to continue? Y/n: ").lower()
-    return response in {'yes', 'ye', 'y', ''}
-
-
-def clear_directory(directory_path):
-    print("Clearing directory...")
-    shutil.rmtree(directory_path)
-    os.mkdir(directory_path)
-    print("Done!")
-
-
-def unzip_submission_files_into_directory(zipfile_path, destination_directory_path):
-    print("\nUnzipping assignment archive...")
-    the_zip = zipfile.ZipFile(zipfile_path)
-    the_zip.extractall(destination_directory_path)
-    print("Done!")
-
-
-def get_student_ids_from_submission_filenames(submission_files_path):
-    student_ids = set()
-    for filename in sorted(os.listdir(submission_files_path)):
-        print(filename)
-        student_ids.add(get_student_id_from_filename(filename))
-    return student_ids
-
-
-def create_student_id_to_submission_filename_map(student_ids, submission_files_path_path):
-    id_to_filename_map = {}
-    for id in student_ids:
-        id_to_filename_map[id] = []
-
-    for filename in sorted(os.listdir(submission_files_path_path)):
-        id_to_filename_map[get_student_id_from_filename(filename)].append(filename)
-
-    return id_to_filename_map
-
-
-def get_student_id_from_filename(filename):
-    front = filename.split(sep='_attempt_', maxsplit=2)[0]
-    return front[front.rindex('_') + 1:]
-
-
-def relocate_submission_files_to_per_student_directories(submission_files_path, id_to_filename_map):
     print("\nRelocating files to student directories...")
-    for id in id_to_filename_map:
-        student_directory_path = create_student_directory(submission_files_path, id)
-        for filename in id_to_filename_map[id]:
-            old_file_path = os.path.join(submission_files_path, filename)
-            new_file_path = os.path.join(student_directory_path,
-                                         remove_bblearn_filename_prefix(filename))
-            print("\tmoving " + old_file_path)
-            print("\tto " + new_file_path)
-            os.rename(old_file_path, new_file_path)
+    for entry in submission_file_entries:
+        id = util.extract_student_id(entry.name)
+        student_directory = join(submission_directory, id)
+
+        if not exists(student_directory):
+            print(f"\nCreating student directory {student_directory}")
+            mkdir(student_directory)
+
+        new_path = join(student_directory,
+                        util.remove_bblearn_prefix(entry.name))
+        print(f"\trenaming {entry.path}")
+        print(f"\tto {new_path}")
+        rename(entry.path, new_path)
 
 
-def create_student_directory(submission_files_path, student_directory_name):
-    print("\nCreating student directory " + student_directory_name)
-    student_directory_path = os.path.join(submission_files_path, student_directory_name)
-    os.mkdir(student_directory_path)
-    return student_directory_path
+def extract_any_zips(directory):
+    "Extracts any zip files in the directory into the directory"
+    for entry in scandir(directory):
+        if is_zipfile(entry.path):
+            with ZipFile(entry.path) as z:
+                z.extractall(directory)
 
 
-def remove_bblearn_filename_prefix(filename):
-    # TODO: Handle the BBLearn submission case better; rename it?  It currently
-    # comes out as just a date.txt
-    back = filename.split(sep='_attempt_', maxsplit=2)[1]
-    return back[back.find('_') + 1:]
+def hoist_lone_subdir_if_exists(directory):
+    entries = list(scandir(directory))
+    if len(entries) == 1 and entries[0].isdir():
+        util.hoist_directory(entries[0].path)
 
 
-def extract_and_delete_and_normalize_submitted_zipfiles(top_level_student_directory_path):
-    for student_directory_name in os.listdir(top_level_student_directory_path):
-        student_directory_path = os.path.join(top_level_student_directory_path, student_directory_name) 
-        for item in os.listdir(student_directory_path):
-            if '.zip' in item:
-                zipfile_path = os.path.join(student_directory_path, item)
-                zipfile.ZipFile(zipfile_path).extractall(student_directory_path)
-                os.remove(zipfile_path)
-                normalize(student_directory_path)
-                break
+def clean_up(student_directory, remove_zips=False):
+    for cruft in ['__MACOSX', '.DS_store']:
+        shutil.rmtree(join(student_directory, cruft), ignore_errors=True)
 
-
-def normalize(path_to_extracted_contents):
-    shutil.rmtree(os.path.join(path_to_extracted_contents, '__MACOSX'), ignore_errors=True)
-    shutil.rmtree(os.path.join(path_to_extracted_contents, '.DS_store'), ignore_errors=True)
-    singular_contents_directory_path = get_singular_contents_directory_path(path_to_extracted_contents)
-    if singular_contents_directory_path is not None:
-        for real_contents_filename in os.listdir(singular_contents_directory_path):
-            shutil.copy2(os.path.join(singular_contents_directory_path, real_contents_filename),
-                         path_to_extracted_contents)
-            shutil.rmtree(singular_contents_directory_path)
-
-
-def get_singular_contents_directory_path(path_to_extracted_contents):
-    contents_filenames = os.listdir(path_to_extracted_contents)
-    if len(contents_filenames) == 1:
-        contents_subfolder_path = os.path.join(path_to_extracted_contents, contents_filenames[0])
-        if os.path.isdir(contents_subfolder_path):
-            return contents_subfolder_path
-    return None
-
-
-if __name__ == "__main__":
-    main()
+    if remove_zips:
+        for file_entry in scandir(student_directory):
+            if is_zipfile(file_entry.path):
+                remove(file_entry.path)
